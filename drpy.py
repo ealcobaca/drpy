@@ -21,52 +21,18 @@ import numpy as np
 from arff2pandas import a2p
 
 
-# def read_arff_df(path):
-#     """TODO: Docstring for read_arff_df.
-#
-#     :path: TODO
-#     :returns: TODO
-#
-#     """
-#     with open(path) as file:
-#         data = arff.load(file)
-#         attrs = data['attributes']
-#         attrs_final = [attr[0] for attr in attrs]
-#     return pd.DataFrame(data=data['data'], columns=attrs_final)
-#
-#
+def preprocessing(data_raw, report):
+    """Preprocessing the dataset.
+       Docstring for preprocessing.
 
-
-def job(dataset, output):
-    """TODO: Docstring for job.
-
-    :id: TODO
-    :dataset: TODO
+    :data-raw: dataset with numeric values (dataframe)
     :returns: TODO
 
     """
-    data_name = dataset[0].split('/')[1]
-    report = {"dataset": [],
-              "tot-col": [],
-              "col-drop-var": [],
-              "col-drop-corr": [],
-              "col-lda": [],
-              "col-pca80": [],
-              "col-pca85": [],
-              "col-pca90": [],
-              "col-pca95": []}
-    report = pd.DataFrame(data=report)
-    # reading a row dataset
-    data_raw = pd.read_csv(dataset[0])
-
-    data_raw_id = data_raw[["id"]]  # get the id
-    data_raw_target = data_raw[["Class"]]  # get the id
-    data_raw_target_num = np.array(
-        pd.get_dummies(data_raw_target).values.argmax(1))  # string to numeric
-    data_raw = data_raw.drop(columns=["Class", "id"])  # remove id and target
-
+    report.append(data_raw.shape[1])  # column length
     data_raw = data_raw.drop(
         columns=data_raw.columns[data_raw.var().abs() == 0])
+    report.append(data_raw.shape[1])  # column length after drop without variation
     data_raw = (data_raw - data_raw.mean())/data_raw.std()  # z-score
 
     # removing correlated features
@@ -79,36 +45,106 @@ def job(dataset, output):
     to_drop = [column for column in upper_matrix.columns
                if any(upper_matrix[column] > 0.80)]
     # Removing
-    #print(data_raw.shape + " " + to_drop.shape)
-    print(data_raw.shape[1])
-    print(len(to_drop))
     data_raw = data_raw.drop(columns=to_drop)
+    report.append(data_raw.shape[1])  # column length after drop correlated features
+    return data_raw
 
-    # applying the LDA
+
+def applyingPCA(data_raw, perc, data_raw_id,
+                data_raw_target, data_name, output, report):
+    """this function applies the PCA.
+
+    :data_raw: TODO
+    :perc: TODO
+    :data_raw_id: TODO
+    :data_raw_target: TODO
+    :data_name: TODO
+    :output: TODO
+    :report: TODO
+    :returns: TODO
+
+    """
+    for value in perc:
+        pca = PCA(value/100.0)
+        pca.fit(data_raw)
+        data_transf_pca = pca.transform(data_raw)
+        data_transf_pca = pd.DataFrame(data_transf_pca)
+
+        path = output + "pca/" + str(value) + "/"
+        if not os.path.exists(path):
+            os.makedirs(path)
+        # unite the id, transformed data and target and write on hd
+        data = pd.concat(
+            [data_raw_id, data_transf_pca, data_raw_target], axis=1)
+        data.to_csv(path+data_name, index=False)
+
+    return
+
+
+def applyingLDA(data_raw, data_raw_target_num, data_raw_id,
+                data_raw_target, data_name, output, report):
+    """This function applies LDA in a dataset
+
+    :data_raw: TODO
+    :target: TODO
+    :output: TODO
+    :report: TODO
+    :returns: TODO
+    """
     lda = LinearDiscriminantAnalysis()
     lda.fit(data_raw, data_raw_target_num)
     data_transf_lda = lda.transform(data_raw)
     data_transf_lda = pd.DataFrame(data_transf_lda)
     # unite the id, transformed data and target and write on hd
     data = pd.concat([data_raw_id, data_transf_lda, data_raw_target], axis=1)
+
     # save file
     path = output + "lda/"
     if not os.path.exists(path):
         os.makedirs(path)
     data.to_csv(path+data_name, index=False)
 
-    # apllying PCA
-    name = dataset[0].split('/')
-    for value in [80, 85, 90, 95]:
-        pca = PCA(value/100.0)
-        pca.fit(data_raw)
-        data_transf_pca = pca.transform(data_raw)
-        data_transf_pca = pd.DataFrame(data_transf_pca)
-        path = output + "pca/" + str(value) + "/"
-        if not os.path.exists(path):
-            os.makedirs(path)
-        data.to_csv(path+data_name, index=False)
+    return
 
+
+def job(dataset, output):
+    """jop that will be executed in parallel.
+
+    :dataset: TODO
+    :returns: TODO
+
+    """
+    data_name = dataset[0].split('/')[1]
+    # reportF = {"dataset": [],
+    #           "tot-col": [],
+    #           "col-drop-var": [],
+    #           "col-drop-corr": [],
+    #           "col-lda": [],
+    #           "col-pca80": [],
+    #           "col-pca85": [],
+    #           "col-pca90": [],
+    #           "col-pca95": []}
+    # report = pd.DataFrame(data=report)
+    report = []
+    # reading a row dataset
+    data_raw = pd.read_csv(dataset[0])
+
+    data_raw_id = data_raw[["id"]]  # get the id
+    data_raw_target = data_raw[["Class"]]  # get the Class
+    data_raw_target_num = np.array(
+        pd.get_dummies(data_raw_target).values.argmax(1))  # string to numeric
+    data_raw = data_raw.drop(columns=["Class", "id"])  # remove id and target
+
+    # preprocessing
+    data_raw = preprocessing(data_raw, report)
+
+    # applying the LDA
+    applyingLDA(data_raw, data_raw_target_num, data_raw_id,
+                data_raw_target, data_name, output, report)
+    # apllying PCA
+    perc = [80, 85, 90, 85]
+    applyingPCA(data_raw, perc, data_raw_id,
+                data_raw_target, data_name, output, report)
     print("DONE! -- " + data_name)
 
 
@@ -121,10 +157,10 @@ def jobs_mult_proc(datasets, output, nprocesses):
     :returns: TODO
 
     """
-    #job(datasets[13], output)
+    # job(datasets[13], output)
     pool = mp.Pool(processes=nprocesses)
     # launching multiple evaluations asynchronously
-    multiple_results = [pool.apply_async(job, (dataset, output,))
+    multiple_reports = [pool.apply_async(job, (dataset, output,))
                         for dataset in datasets]
     pool.close()
     pool.join()
@@ -190,7 +226,9 @@ def main(argv):
 
     datasets = read_file_datasets(args[0])
     jobs_mult_proc(datasets, output, nprocesses)
-    #print(datasets)
+
+    return 0
+
 
 if __name__ == "__main__":
     main(sys.argv[1:])

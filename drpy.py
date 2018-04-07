@@ -10,15 +10,16 @@ Description: TODO
 """
 
 import multiprocessing as mp
+import math
+import time
 import sys
 import os
 import getopt
-from scipy.io import arff
 import pandas as pd
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.decomposition import PCA
+from sklearn.manifold import TSNE
 import numpy as np
-from arff2pandas import a2p
 
 
 def preprocessing(data_raw, report):
@@ -32,7 +33,8 @@ def preprocessing(data_raw, report):
     report.append(data_raw.shape[1])  # column length
     data_raw = data_raw.drop(
         columns=data_raw.columns[data_raw.var().abs() == 0])
-    report.append(data_raw.shape[1])  # column length after drop without variation
+    report.append(
+        data_raw.shape[1])  # column length after drop without variation
     data_raw = (data_raw - data_raw.mean())/data_raw.std()  # z-score
 
     # removing correlated features
@@ -46,12 +48,46 @@ def preprocessing(data_raw, report):
                if any(upper_matrix[column] > 0.80)]
     # Removing
     data_raw = data_raw.drop(columns=to_drop)
-    report.append(data_raw.shape[1])  # column length after drop correlated features
+    report.append(
+        data_raw.shape[1])  # column length after drop correlated features
     return data_raw
 
 
+def applyingTSNE(data_raw, n_components, data_raw_id, data_raw_target,
+                 data_name, output, report, benchm):
+    """TODO: Docstring for applyingTSNE.
+
+    :data_raw: TODO
+    :n_components: TODO
+    :data_raw_target: TODO
+    :data_name: TODO
+    :output: TODO
+    :returns: TODO
+
+    """
+    for n_comp in n_components:
+        time_start = time.time()
+        porc_comp = int(math.floor(data_raw.shape[1] * (n_comp/100)))
+        data_transf_tsne = TSNE(n_components=porc_comp,
+                                method="exact").fit_transform(data_raw)
+        data_transf_tsne = pd.DataFrame(data_transf_tsne)
+        time_end = time.time()
+        benchm.append(round((time_end-time_start) * 1000.0, 4))
+
+        report.append(data_transf_tsne.shape[1])
+        path = output + "tsne/" + str(n_comp) + "/"
+        if not os.path.exists(path):
+            os.makedirs(path)
+        # unite the id, transformed data and target and write on hd
+        data = pd.concat(
+            [data_raw_id, data_transf_tsne, data_raw_target], axis=1)
+        data.to_csv(path+data_name, index=False)
+
+    return
+
+
 def applyingPCA(data_raw, perc, data_raw_id,
-                data_raw_target, data_name, output, report):
+                data_raw_target, data_name, output, report, benchm):
     """this function applies the PCA.
 
     :data_raw: TODO
@@ -62,14 +98,18 @@ def applyingPCA(data_raw, perc, data_raw_id,
     :output: TODO
     :report: TODO
     :returns: TODO
-
     """
+
     for value in perc:
+        time_start = time.time()
         pca = PCA(value/100.0)
         pca.fit(data_raw)
         data_transf_pca = pca.transform(data_raw)
         data_transf_pca = pd.DataFrame(data_transf_pca)
+        time_end = time.time()
+        benchm.append(round((time_end-time_start) * 1000.0, 4))
 
+        report.append(data_transf_pca.shape[1])
         path = output + "pca/" + str(value) + "/"
         if not os.path.exists(path):
             os.makedirs(path)
@@ -82,7 +122,7 @@ def applyingPCA(data_raw, perc, data_raw_id,
 
 
 def applyingLDA(data_raw, data_raw_target_num, data_raw_id,
-                data_raw_target, data_name, output, report):
+                data_raw_target, data_name, output, report, benchm):
     """This function applies LDA in a dataset
 
     :data_raw: TODO
@@ -91,10 +131,16 @@ def applyingLDA(data_raw, data_raw_target_num, data_raw_id,
     :report: TODO
     :returns: TODO
     """
+
+    time_start = time.time()
     lda = LinearDiscriminantAnalysis()
     lda.fit(data_raw, data_raw_target_num)
     data_transf_lda = lda.transform(data_raw)
+    time_end = time.time()
+    benchm.append(round((time_end-time_start) * 1000.0, 4))
+
     data_transf_lda = pd.DataFrame(data_transf_lda)
+    report.append(data_transf_lda.shape[1])
     # unite the id, transformed data and target and write on hd
     data = pd.concat([data_raw_id, data_transf_lda, data_raw_target], axis=1)
 
@@ -115,17 +161,10 @@ def job(dataset, output):
 
     """
     data_name = dataset[0].split('/')[1]
-    # reportF = {"dataset": [],
-    #           "tot-col": [],
-    #           "col-drop-var": [],
-    #           "col-drop-corr": [],
-    #           "col-lda": [],
-    #           "col-pca80": [],
-    #           "col-pca85": [],
-    #           "col-pca90": [],
-    #           "col-pca95": []}
-    # report = pd.DataFrame(data=report)
     report = []
+    benchm = []
+    report.append(data_name)
+    benchm.append(data_name)
     # reading a row dataset
     data_raw = pd.read_csv(dataset[0])
 
@@ -140,12 +179,16 @@ def job(dataset, output):
 
     # applying the LDA
     applyingLDA(data_raw, data_raw_target_num, data_raw_id,
-                data_raw_target, data_name, output, report)
+                data_raw_target, data_name, output, report, benchm)
     # apllying PCA
-    perc = [80, 85, 90, 85]
+    perc = [80, 85, 90, 95]
     applyingPCA(data_raw, perc, data_raw_id,
-                data_raw_target, data_name, output, report)
-    print("DONE! -- " + data_name)
+                data_raw_target, data_name, output, report, benchm)
+    # applying TSNE
+    n_components = [10, 25, 50, 75]
+    applyingTSNE(data_raw, n_components, data_raw_id, data_raw_target,
+                 data_name, output, report, benchm)
+    return report, benchm
 
 
 def jobs_mult_proc(datasets, output, nprocesses):
@@ -157,13 +200,36 @@ def jobs_mult_proc(datasets, output, nprocesses):
     :returns: TODO
 
     """
+    report_columns = ["dataset", "tot-col", "col-drop-var", "col-drop-corr",
+                      "col-lda", "col-pca80", "col-pca85",
+                      "col-pca90", "col-pca95",
+                      "col-tsne10", "col-tsne25", "col-tsne50", "col-tsne75"]
+    benchm_columns = ["dataset", "time-lda",
+                      "time-pca80", "time-pca85", "time-pca90", "time-pca95",
+                      "time-tsne10", "time-tsne25",
+                      "time-tsne50", "time-tsne75"]
+
     # job(datasets[13], output)
     pool = mp.Pool(processes=nprocesses)
     # launching multiple evaluations asynchronously
-    multiple_reports = [pool.apply_async(job, (dataset, output,))
+    multiple_results = [pool.apply_async(job, (dataset, output,))
                         for dataset in datasets]
+    results = [result.get() for result in multiple_results]
+    report = [report[0] for report in results]
+    benchm = [time[1] for time in results]
+
     pool.close()
     pool.join()
+
+    report = pd.DataFrame(data=report, columns=report_columns)
+    benchm = pd.DataFrame(data=benchm, columns=benchm_columns)
+
+    path = "report/"
+    if not os.path.exists(path):
+        os.makedirs(path)
+    report.to_csv(path+"report.csv", index=False)
+    benchm.to_csv(path+"benchmarking.csv", index=False)
+
     return
 
 

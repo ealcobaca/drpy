@@ -1,0 +1,15 @@
+datasets-csv/ASP-POTASSCO.csv class id
+datasets-csv/BNSL-2016.csv class id
+datasets-csv/CPMP-2015.csv class id
+datasets-csv/CSP-2010.csv class id
+datasets-csv/CSP-MZN-2013.csv class id
+datasets-csv/GRAPHS-2015.csv class id
+datasets-csv/MAXSAT12-PMS.csv class id
+datasets-csv/MAXSAT15-PMS-INDU.csv class id
+datasets-csv/MAXSAT-PMS-2016.csv class id
+datasets-csv/MAXSAT-WPMS-2016.csv class id
+datasets-csv/MIP-2016.csv class id
+datasets-csv/PROTEUS-2014.csv class id
+datasets-csv/QBF-2011.csv class id
+datasets-csv/QBF-2014.csv class id
+datasets-csv/SAT03-16_INDU.csv class id

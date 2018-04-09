@@ -185,7 +185,7 @@ def job(dataset, output):
     applyingPCA(data_raw, perc, data_raw_id,
                 data_raw_target, data_name, output, report, benchm)
     # applying TSNE
-    n_components = [10, 25, 50, 75]
+    n_components = [10, 20, 30, 50]
     applyingTSNE(data_raw, n_components, data_raw_id, data_raw_target,
                  data_name, output, report, benchm)
     return report, benchm

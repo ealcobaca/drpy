@@ -1,6 +1,6 @@
 #PBS -N drpy  
 #PBS -l select=1:ncpus=20
-#PBS -l walltime=366:00:00 
+#PBS -l walltime=336:00:00 
 #PBS -m abe
 #PBS -M e.alcobaca@gmail.com
 

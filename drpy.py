@@ -22,6 +22,14 @@ from sklearn.manifold import TSNE
 import numpy as np
 
 
+def create_dirs(paths):
+    """  """
+    for path in paths:
+        if not os.path.exists(path):
+            os.makedirs(path) 
+    return
+
+
 def preprocessing(data_raw, report):
     """Preprocessing the dataset.
        Docstring for preprocessing.
@@ -31,8 +39,7 @@ def preprocessing(data_raw, report):
 
     """
     report.append(data_raw.shape[1])  # column length
-    data_raw = data_raw.drop(
-        columns=data_raw.columns[data_raw.var().abs() == 0])
+    data_raw = data_raw.drop(data_raw.columns[data_raw.var().abs() == 0], axis=1)
     report.append(
         data_raw.shape[1])  # column length after drop without variation
     data_raw = (data_raw - data_raw.mean())/data_raw.std()  # z-score
@@ -47,7 +54,7 @@ def preprocessing(data_raw, report):
     to_drop = [column for column in upper_matrix.columns
                if any(upper_matrix[column] > 0.80)]
     # Removing
-    data_raw = data_raw.drop(columns=to_drop)
+    data_raw = data_raw.drop(to_drop, axis=1)
     report.append(
         data_raw.shape[1])  # column length after drop correlated features
     return data_raw
@@ -75,12 +82,10 @@ def applyingTSNE(data_raw, n_components, data_raw_id, data_raw_target,
         benchm.append(round((time_end-time_start) * 1000.0, 4))
 
         report.append(data_transf_tsne.shape[1])
-        path = output + "tsne/" + str(n_comp) + "/"
-        if not os.path.exists(path):
-            os.makedirs(path)
         # unite the id, transformed data and target and write on hd
         data = pd.concat(
             [data_raw_id, data_transf_tsne, data_raw_target], axis=1)
+        path = output + "tsne/" + str(n_comp) + '/'
         data.to_csv(path+data_name, index=False)
 
     return
@@ -110,12 +115,10 @@ def applyingPCA(data_raw, perc, data_raw_id,
         benchm.append(round((time_end-time_start) * 1000.0, 4))
 
         report.append(data_transf_pca.shape[1])
-        path = output + "pca/" + str(value) + "/"
-        if not os.path.exists(path):
-            os.makedirs(path)
         # unite the id, transformed data and target and write on hd
         data = pd.concat(
             [data_raw_id, data_transf_pca, data_raw_target], axis=1)
+        path = output + "pca/" + str(value) + '/' 
         data.to_csv(path+data_name, index=False)
 
     return
@@ -145,15 +148,12 @@ def applyingLDA(data_raw, data_raw_target_num, data_raw_id,
     data = pd.concat([data_raw_id, data_transf_lda, data_raw_target], axis=1)
 
     # save file
-    path = output + "lda/"
-    if not os.path.exists(path):
-        os.makedirs(path)
-    data.to_csv(path+data_name, index=False)
+    data.to_csv(output+'lda/'+data_name, index=False)
 
     return
 
 
-def job(dataset, output):
+def job(dataset, output, perc, n_components):
     """jop that will be executed in parallel.
 
     :dataset: TODO
@@ -172,20 +172,17 @@ def job(dataset, output):
     data_raw_target = data_raw[["Class"]]  # get the Class
     data_raw_target_num = np.array(
         pd.get_dummies(data_raw_target).values.argmax(1))  # string to numeric
-    data_raw = data_raw.drop(columns=["Class", "id"])  # remove id and target
+    data_raw = data_raw.drop(["Class", "id"], axis=1)  # remove id and target
 
     # preprocessing
     data_raw = preprocessing(data_raw, report)
 
-    # applying the LDA
     applyingLDA(data_raw, data_raw_target_num, data_raw_id,
                 data_raw_target, data_name, output, report, benchm)
     # apllying PCA
-    perc = [80, 85, 90, 95]
     applyingPCA(data_raw, perc, data_raw_id,
                 data_raw_target, data_name, output, report, benchm)
     # applying TSNE
-    n_components = [10, 20, 30, 50]
     applyingTSNE(data_raw, n_components, data_raw_id, data_raw_target,
                  data_name, output, report, benchm)
     return report, benchm
@@ -209,10 +206,20 @@ def jobs_mult_proc(datasets, output, nprocesses):
                       "time-tsne10", "time-tsne25",
                       "time-tsne50", "time-tsne75"]
 
-    # job(datasets[13], output)
+    perc = [80, 85, 90, 95]
+    n_components = [10, 20, 30, 50]
+    
+    path0 = ["report/"]
+    path1 = [output + "lda/"]
+    path2 = [output + "pca/" + str(value) + "/" for value in perc]
+    path3 = [output + "tsne/" + str(value) + "/" for value in n_components]
+    paths = path0 + path1 + path2 + path3
+    create_dirs(paths)
+
+    # job(datasets[0], output)
     pool = mp.Pool(processes=nprocesses)
     # launching multiple evaluations asynchronously
-    multiple_results = [pool.apply_async(job, (dataset, output,))
+    multiple_results = [pool.apply_async(job, (dataset, output, perc, n_components,))
                         for dataset in datasets]
     results = [result.get() for result in multiple_results]
     report = [report[0] for report in results]
@@ -224,11 +231,8 @@ def jobs_mult_proc(datasets, output, nprocesses):
     report = pd.DataFrame(data=report, columns=report_columns)
     benchm = pd.DataFrame(data=benchm, columns=benchm_columns)
 
-    path = "report/"
-    if not os.path.exists(path):
-        os.makedirs(path)
-    report.to_csv(path+"report.csv", index=False)
-    benchm.to_csv(path+"benchmarking.csv", index=False)
+    report.to_csv("report/report.csv", index=False)
+    benchm.to_csv("report/benchmarking.csv", index=False)
 
     return
 
